@@ -18,6 +18,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://tokokue.nabilfikri.web.id'),
   title: 'Dapur Kue Lebaran',
   description:
     'Pesan kue kering Lebaran terbaik. Nastar, kastengel, putri salju, sagu keju, dan lainnya. Dipanggang dengan cinta untuk hari raya Anda.',
