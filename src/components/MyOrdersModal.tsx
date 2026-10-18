@@ -20,12 +20,23 @@ export default function MyOrdersModal({ isOpen, onClose, onSelectOrder }: MyOrde
   const updateOrderStatus = useOrderHistoryStore((s) => s.updateOrderStatus);
   const user = useAuthStore((s) => s.user);
 
-  const [orders, setOrders] = useState<Order[]>(localOrders);
+  // Filter localOrders strictly for the current logged-in user
+  const userLocalOrders = user
+    ? localOrders.filter((lo) => {
+        const uContact = user.contact.toLowerCase();
+        return (
+          lo.customer_email?.toLowerCase() === uContact ||
+          lo.customer_phone === user.contact
+        );
+      })
+    : [];
 
-  // Sync with local store
+  const [orders, setOrders] = useState<Order[]>(userLocalOrders);
+
+  // Sync with user's local store
   useEffect(() => {
-    setOrders(localOrders);
-  }, [localOrders]);
+    setOrders(userLocalOrders);
+  }, [userLocalOrders]);
 
   // Query Supabase for updated orders if user is logged in
   useEffect(() => {
@@ -34,14 +45,14 @@ export default function MyOrdersModal({ isOpen, onClose, onSelectOrder }: MyOrde
     if (isSupabaseConfigured && user) {
       const fetchUserOrders = async () => {
         try {
-          const sanitizedContact = user.contact.replace(/[^a-zA-Z0-9@.+_-]/g, '');
+          const userContact = user.contact.trim().toLowerCase();
           const { data } = await supabase
             .from('orders')
             .select('*, order_items(*)')
-            .or(`customer_phone.eq.${sanitizedContact},customer_email.eq.${sanitizedContact}`)
+            .or(`customer_phone.eq.${userContact},customer_email.eq.${userContact}`)
             .order('created_at', { ascending: false });
 
-          if (data && data.length > 0) {
+          if (data) {
             interface SupabaseOrderRow extends Order {
               order_items?: Order['items'];
             }
@@ -52,7 +63,9 @@ export default function MyOrdersModal({ isOpen, onClose, onSelectOrder }: MyOrde
             }));
 
             const combinedMap = new Map<string, Order>();
-            localOrders.forEach((lo) => combinedMap.set(lo.order_number, lo));
+            // Add user's own local orders first
+            userLocalOrders.forEach((lo) => combinedMap.set(lo.order_number, lo));
+            // Merge with Supabase orders
             mappedSupabaseOrders.forEach((so) => {
               const existing = combinedMap.get(so.order_number);
               combinedMap.set(so.order_number, {
@@ -69,7 +82,7 @@ export default function MyOrdersModal({ isOpen, onClose, onSelectOrder }: MyOrde
             );
           }
         } catch {
-          // Fallback to local orders
+          setOrders(userLocalOrders);
         }
       };
 

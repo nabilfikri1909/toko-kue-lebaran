@@ -357,14 +357,23 @@ export default function AuthModal({
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setIsSwitchingAccount(true)}
+                        onClick={async () => {
+                          if (isSupabaseConfigured) {
+                            await supabase.auth.signOut();
+                          }
+                          logout();
+                          setIsSwitchingAccount(true);
+                        }}
                         className="h-10 border border-cocoa/20 text-cocoa/80 hover:bg-cocoa/5 rounded-button text-xs font-semibold transition-colors"
                       >
                         Ganti Akun
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
+                          if (isSupabaseConfigured) {
+                            await supabase.auth.signOut();
+                          }
                           logout();
                           onClose();
                         }}

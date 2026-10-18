@@ -108,7 +108,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderSuccess }: Check
         body: JSON.stringify({
           customer_name: normalizedFormData.customer_name,
           customer_phone: normalizedFormData.customer_phone,
-          customer_email: user?.type === 'email' ? user.contact : null,
+          customer_email: user?.contact?.includes('@') ? user.contact : (normalizedFormData.customer_email || null),
           delivery_type: normalizedFormData.delivery_type,
           customer_address:
             normalizedFormData.delivery_type === 'DELIVERY'
