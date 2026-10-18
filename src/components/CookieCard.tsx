@@ -24,10 +24,17 @@ const DEFAULT_COOKIE_IMAGES: Record<string, string> = {
 };
 
 function resolveCookieImage(product: ProductWithVariants): string {
-  if (product.image_url && product.image_url.startsWith('http')) {
-    return product.image_url;
+  if (product.image_url) {
+    const trimmed = product.image_url.trim();
+    if (
+      trimmed.startsWith('http') ||
+      trimmed.startsWith('data:image') ||
+      trimmed.startsWith('/')
+    ) {
+      return trimmed;
+    }
   }
-  const slug = product.slug.toLowerCase();
+  const slug = (product.slug || product.name || '').toLowerCase();
   for (const [key, url] of Object.entries(DEFAULT_COOKIE_IMAGES)) {
     if (slug.includes(key)) return url;
   }
@@ -118,6 +125,7 @@ export default function CookieCard({ product }: CookieCardProps) {
             src={resolveCookieImage(product)}
             alt={product.name}
             fill
+            unoptimized
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover group-hover:scale-105 transition-transform duration-500"
           />

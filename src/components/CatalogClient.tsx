@@ -39,12 +39,12 @@ export default function CatalogClient({ products: initialProducts, isLiveDb = fa
     setProducts(initialProducts);
   }, [initialProducts]);
 
-  // Real-time stock subscription from Supabase
+  // Real-time stock & products subscription from Supabase
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
     const channel = supabase
-      .channel('catalog-realtime-stock')
+      .channel('catalog-realtime-products-and-stock')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'product_variants' },
@@ -58,11 +58,50 @@ export default function CatalogClient({ products: initialProducts, isLiveDb = fa
               return {
                 ...p,
                 product_variants: p.product_variants.map((v) =>
-                  v.id === updatedVariant.id ? { ...v, stock: updatedVariant.stock } : v
+                  v.id === updatedVariant.id
+                    ? { ...v, stock: updatedVariant.stock, price: updatedVariant.price }
+                    : v
                 ),
               };
             })
           );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        async (payload) => {
+          if (payload.eventType === 'DELETE') {
+            const oldId = (payload.old as any)?.id;
+            if (oldId) {
+              setProducts((prev) => prev.filter((p) => p.id !== oldId));
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as any;
+            if (updated.is_active === false) {
+              setProducts((prev) => prev.filter((p) => p.id !== updated.id));
+            } else {
+              setProducts((prev) =>
+                prev.map((p) =>
+                  p.id === updated.id ? { ...p, ...updated } : p
+                )
+              );
+            }
+          } else if (payload.eventType === 'INSERT') {
+            const newProd = payload.new as any;
+            if (newProd.is_active !== false) {
+              const { data: variants } = await supabase
+                .from('product_variants')
+                .select('*')
+                .eq('product_id', newProd.id)
+                .order('weight_grams');
+              const fullProduct: ProductWithVariants = {
+                ...newProd,
+                product_variants: variants || [],
+              };
+              setProducts((prev) => [fullProduct, ...prev.filter((p) => p.id !== newProd.id)]);
+            }
+          }
         }
       )
       .subscribe();
