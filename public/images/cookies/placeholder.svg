@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#FFFDF7"/>
+  <circle cx="200" cy="200" r="120" fill="#D48B38" opacity="0.15"/>
+  <circle cx="200" cy="200" r="90" fill="#D48B38" opacity="0.3"/>
+  <circle cx="170" cy="180" r="10" fill="#2C1A12" opacity="0.4"/>
+  <circle cx="220" cy="170" r="8" fill="#2C1A12" opacity="0.4"/>
+  <circle cx="210" cy="220" r="12" fill="#2C1A12" opacity="0.4"/>
+  <circle cx="160" cy="225" r="9" fill="#2C1A12" opacity="0.4"/>
+  <text x="200" y="340" font-family="sans-serif" font-size="16" fill="#2C1A12" font-weight="bold" text-anchor="middle" opacity="0.6">Kue Lebaran</text>
+</svg>
