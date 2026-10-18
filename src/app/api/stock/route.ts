@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
+function checkAdminAuth(req: NextRequest): boolean {
+  const adminSecret = process.env.ADMIN_API_KEY || process.env.MERCHANT_SECRET_KEY;
+  const key = req.headers.get('x-admin-key') || req.headers.get('authorization')?.replace('Bearer ', '');
+
+  if (adminSecret) {
+    return key === adminSecret;
+  }
+  // In production, require explicit secret key
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  // In development, allow dev secret
+  return key === 'toko-kue-dev-key' || key === 'dev-secret-key';
+}
+
 // GET: View all cookie variants with their current stock levels
 export async function GET() {
   if (!isSupabaseConfigured) {
@@ -22,8 +37,15 @@ export async function GET() {
   return NextResponse.json({ data });
 }
 
-// POST: Update stock of a specific variant (callable from Merchant App)
+// POST: Update stock of a specific variant (callable from Merchant App - requires auth)
 export async function POST(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Akses ditolak. Kunci otentikasi admin diperlukan.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { variant_id, stock } = body;
@@ -65,8 +87,15 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PUT: Update variant details (price, label, weight, stock)
+// PUT: Update variant details (price, label, weight, stock - requires auth)
 export async function PUT(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Akses ditolak. Kunci otentikasi admin diperlukan.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { variant_id, price, label, weight_grams, stock } = body;
@@ -109,8 +138,15 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-// DELETE: Delete a specific variant
+// DELETE: Delete a specific variant (requires auth)
 export async function DELETE(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Akses ditolak. Kunci otentikasi admin diperlukan.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const variant_id = searchParams.get('variant_id');

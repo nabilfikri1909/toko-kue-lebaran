@@ -206,6 +206,16 @@ export default function OrderTrackingModal({ order, onClose }: OrderTrackingModa
                 <p className="text-[11px] text-cocoa/70 mt-2">
                   Scan QR di atas melalui aplikasi Mobile Banking atau E-Wallet (GoPay, OVO, Dana, ShopeePay)
                 </p>
+                <a
+                  href={`https://wa.me/62811839280?text=${encodeURIComponent(
+                    `Halo Dapur Kue Lebaran, saya ingin konfirmasi pesanan kue #${order.order_number} atas nama ${order.customer_name} sebesar ${formatRupiah(order.total_price)}. Berikut saya lampirkan bukti pembayaran.`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 w-full py-2.5 px-4 bg-palm text-cream font-semibold rounded-button text-xs hover:bg-palm/90 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <span>💬 Konfirmasi Pembayaran via WhatsApp</span>
+                </a>
               </div>
             </div>
           )}

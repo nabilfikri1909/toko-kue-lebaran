@@ -11,54 +11,22 @@ export default function AuthCallbackPage() {
   const login = useAuthStore((s) => s.login);
   const [statusMessage, setStatusMessage] = useState('Memproses autentikasi Google...');
   const [error, setError] = useState<string | null>(null);
-  const [isTimeout, setIsTimeout] = useState(false);
-
-  // Fast bypass for developer or evaluator if Google OAuth propagation is pending
-  const handleBypassWithSimulatedGoogle = () => {
-    const demoProfile: UserProfile = {
-      id: `usr-google-${Date.now()}`,
-      contact: 'budi.santoso@gmail.com',
-      type: 'google',
-      name: 'Budi Santoso (Google)',
-      avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop',
-      created_at: new Date().toISOString(),
-    };
-    login(demoProfile);
-    router.push('/');
-  };
 
   useEffect(() => {
     let isMounted = true;
-
-    // Safety timeout: Never leave the user hanging on a spinner
-    const timer = setTimeout(() => {
-      if (isMounted) {
-        setIsTimeout(true);
-      }
-    }, 3500);
 
     async function handleAuth() {
       try {
         const searchParams = new URLSearchParams(window.location.search);
         const urlError = searchParams.get('error') || searchParams.get('error_description');
 
-        // Check hash parameters in case of implicit grant
         const hashStr = window.location.hash.replace(/^#/, '');
         const hashParams = new URLSearchParams(hashStr);
         const hashError = hashParams.get('error') || hashParams.get('error_description');
 
         if (urlError || hashError) {
           const rawErr = urlError || hashError || '';
-          if (rawErr.toLowerCase().includes('exchange') || rawErr.toLowerCase().includes('server_error')) {
-            setError(
-              'Pengaturan Google OAuth di Supabase sedang dalam propagasi. Anda dialihkan otomatis ke mode akun demo dalam beberapa detik...'
-            );
-            setTimeout(() => {
-              if (isMounted) handleBypassWithSimulatedGoogle();
-            }, 2500);
-          } else {
-            setError(`Autentikasi belum berhasil: ${rawErr}`);
-          }
+          setError(`Autentikasi belum berhasil: ${rawErr}`);
           return;
         }
 
@@ -68,10 +36,7 @@ export default function AuthCallbackPage() {
         if (code) {
           const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) {
-            console.warn('PKCE exchange error:', exchangeError.message);
-            setError(
-              'Sistem belum dapat menukarkan kode OAuth dari Google. Pengaturan Google Cloud Console Anda kemungkinan masih dalam proses propagasi.'
-            );
+            setError('Gagal menukarkan kode OAuth dari Google: ' + exchangeError.message);
             return;
           } else if (data?.session) {
             activeSession = data.session;
@@ -101,10 +66,9 @@ export default function AuthCallbackPage() {
           login(userProfile);
           setStatusMessage('Login berhasil! Mengalihkan ke toko kue...');
           setTimeout(() => {
-            router.push('/');
+            if (isMounted) router.push('/');
           }, 600);
         } else {
-          // Listen to onAuthStateChange for hash-based tokens
           const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (session && session.user && isMounted) {
               const user = session.user;
@@ -135,7 +99,6 @@ export default function AuthCallbackPage() {
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
     };
   }, [login, router]);
 
@@ -157,28 +120,10 @@ export default function AuthCallbackPage() {
         {error ? (
           <div className="space-y-2 pt-2">
             <button
-              onClick={handleBypassWithSimulatedGoogle}
-              className="w-full py-3 bg-honey text-cream font-semibold rounded-button text-sm hover:bg-honey/90 transition-colors shadow-sm"
-            >
-              ⚡ Lanjutkan Masuk (Akun Google Demo)
-            </button>
-            <button
               onClick={() => router.push('/login')}
-              className="w-full py-2.5 border border-cocoa/20 text-cocoa/80 rounded-button text-xs hover:bg-cocoa/5 transition-colors"
+              className="w-full py-2.5 bg-honey text-cream font-semibold rounded-button text-xs hover:bg-honey/90 transition-colors shadow-sm"
             >
-              Kembali ke Pilihan Login (Email / WA)
-            </button>
-          </div>
-        ) : isTimeout ? (
-          <div className="space-y-2 pt-2">
-            <p className="text-xs text-cocoa/60">
-              Proses pertukaran token Google memakan waktu lebih lama dari biasanya.
-            </p>
-            <button
-              onClick={handleBypassWithSimulatedGoogle}
-              className="w-full py-3 bg-honey text-cream font-semibold rounded-button text-sm hover:bg-honey/90 transition-colors"
-            >
-              ⚡ Masuk Langsung ke Toko
+              Kembali ke Halaman Login
             </button>
           </div>
         ) : (

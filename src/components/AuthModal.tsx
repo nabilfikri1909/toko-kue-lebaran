@@ -27,15 +27,13 @@ export default function AuthModal({
   const logout = useAuthStore((s) => s.logout);
 
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
-  const [authType, setAuthType] = useState<'phone' | 'email'>('phone');
+  const [authType, setAuthType] = useState<'phone' | 'email'>('email');
   const [contact, setContact] = useState('');
   const [name, setName] = useState('');
   const [step, setStep] = useState<'input' | 'otp'>('input');
   const [otpCode, setOtpCode] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState('');
   const [countdown, setCountdown] = useState(60);
   const [error, setError] = useState('');
-  const [googleNotice, setGoogleNotice] = useState<string | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -57,11 +55,10 @@ export default function AuthModal({
       setCountdown(60);
       setIsGoogleLoading(false);
       setIsSwitchingAccount(false);
-      setGoogleNotice(null);
     }
   }, [isOpen]);
 
-  // Sanitize Indonesian phone numbers (+628... / 628... / 08... with dashes/spaces)
+  // Sanitize Indonesian phone numbers (+628... / 628... / 08...)
   const sanitizePhone = (raw: string) => {
     let cleaned = raw.replace(/[^0-9+]/g, '');
     if (cleaned.startsWith('+62')) cleaned = '0' + cleaned.slice(3);
@@ -69,71 +66,45 @@ export default function AuthModal({
     return cleaned;
   };
 
-  // Google OAuth Login with safety fallback
+  // Google OAuth Login
   const handleGoogleLogin = async () => {
     setError('');
-    setGoogleNotice(null);
     setIsGoogleLoading(true);
 
     try {
-      if (isSupabaseConfigured) {
-        const checkRes = await fetch('/api/auth/check-google');
-        const checkData = await checkRes.json();
-
-        if (checkData.enabled) {
-          const { error: supaErr } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-              redirectTo: `${window.location.origin}/auth/callback`,
-            },
-          });
-          if (supaErr) throw supaErr;
-          return;
-        } else {
-          setGoogleNotice(
-            'Google OAuth belum diaktifkan di Supabase Dashboard. Sistem otomatis mengalihkan ke mode Akun Google Simulasi.'
-          );
-        }
+      if (!isSupabaseConfigured) {
+        setError('Supabase belum dikonfigurasi di file .env.local.');
+        setIsGoogleLoading(false);
+        return;
       }
+
+      const checkRes = await fetch('/api/auth/check-google');
+      const checkData = await checkRes.json();
+
+      if (!checkData.enabled) {
+        setError(
+          'Google OAuth belum diaktifkan di Supabase Dashboard (Authentication -> Providers -> Google).'
+        );
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      const { error: supaErr } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (supaErr) throw supaErr;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn('Google OAuth check:', msg);
-    }
-
-    // Instant Google demo login fallback
-    setTimeout(() => {
-      const demoGoogleProfile: UserProfile = {
-        id: `usr-google-${Date.now()}`,
-        contact: 'budi.santoso@gmail.com',
-        type: 'google',
-        name: 'Budi Santoso',
-        avatar_url:
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop',
-        created_at: new Date().toISOString(),
-      };
-      login(demoGoogleProfile);
+      setError(`Gagal login dengan Google: ${msg}`);
       setIsGoogleLoading(false);
-      onClose();
-      onSuccess?.();
-    }, 600);
-  };
-
-  // Quick preset test login for instant evaluation
-  const handleQuickTestLogin = (presetContact: string, presetName: string, type: 'phone' | 'email') => {
-    const testProfile: UserProfile = {
-      id: `usr-test-${Date.now()}`,
-      contact: presetContact,
-      type,
-      name: presetName,
-      created_at: new Date().toISOString(),
-    };
-    login(testProfile);
-    onClose();
-    onSuccess?.();
+    }
   };
 
   // Send OTP
-  const handleSendOtp = () => {
+  const handleSendOtp = async () => {
     setError('');
     const rawContact = contact.trim();
 
@@ -154,42 +125,124 @@ export default function AuthModal({
       setContact(rawContact.toLowerCase());
     }
 
-    setIsSendingOtp(true);
-    // Generate simulated 6-digit OTP
-    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(mockOtp);
-
-    setTimeout(() => {
-      setIsSendingOtp(false);
-      setStep('otp');
-      setCountdown(60);
-    }, 500);
-  };
-
-  // Verify OTP
-  const handleVerifyOtp = () => {
-    setError('');
-    if (otpCode.trim() !== generatedOtp && otpCode.trim() !== '123456') {
-      setError('Kode OTP salah. Silakan periksa kembali atau gunakan kode simulasi.');
+    if (!isSupabaseConfigured) {
+      setError('Konfigurasi Supabase belum aktif.');
       return;
     }
 
-    const cleanContact = authType === 'phone' ? sanitizePhone(contact) : contact.trim().toLowerCase();
-    const displayName =
-      name.trim() ||
-      (authType === 'phone' ? `Pelanggan WA ${cleanContact.slice(-4)}` : cleanContact.split('@')[0]);
+    setIsSendingOtp(true);
 
-    const newProfile: UserProfile = {
-      id: `usr-${Date.now()}`,
-      contact: cleanContact,
-      type: authType,
-      name: displayName,
-      created_at: new Date().toISOString(),
-    };
+    try {
+      if (authType === 'email') {
+        const { error: supaErr } = await supabase.auth.signInWithOtp({
+          email: rawContact.toLowerCase(),
+          options: {
+            shouldCreateUser: true,
+          },
+        });
 
-    login(newProfile);
-    onClose();
-    onSuccess?.();
+        if (supaErr) {
+          setError(`Gagal mengirim kode ke email: ${supaErr.message}`);
+          setIsSendingOtp(false);
+          return;
+        }
+
+        setIsSendingOtp(false);
+        setStep('otp');
+        setCountdown(60);
+      } else {
+        const cleaned = sanitizePhone(rawContact);
+        const intlPhone = '+62' + cleaned.replace(/^0/, '');
+
+        const { error: supaErr } = await supabase.auth.signInWithOtp({
+          phone: intlPhone,
+          options: {
+            channel: 'whatsapp',
+          },
+        });
+
+        if (supaErr) {
+          setError(
+            `WhatsApp OTP belum aktif di Supabase (${supaErr.message}). Silakan gunakan Email atau Google.`
+          );
+          setIsSendingOtp(false);
+          return;
+        }
+
+        setIsSendingOtp(false);
+        setStep('otp');
+        setCountdown(60);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Terjadi kendala: ${msg}`);
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Verify OTP
+  const handleVerifyOtp = async () => {
+    setError('');
+    if (otpCode.length < 6) {
+      setError('Masukkan 6 digit kode OTP yang diterima.');
+      return;
+    }
+
+    try {
+      const cleanContact = authType === 'phone' ? sanitizePhone(contact) : contact.trim().toLowerCase();
+
+      if (authType === 'email') {
+        const { data, error: verifyErr } = await supabase.auth.verifyOtp({
+          email: cleanContact,
+          token: otpCode.trim(),
+          type: 'email',
+        });
+
+        if (verifyErr || !data.user) {
+          setError(`Kode OTP salah atau kadaluarsa: ${verifyErr?.message || ''}`);
+          return;
+        }
+
+        const newProfile: UserProfile = {
+          id: data.user.id,
+          contact: data.user.email || cleanContact,
+          type: 'email',
+          name: name.trim() || data.user.email?.split('@')[0] || 'Pelanggan Kue',
+          created_at: new Date().toISOString(),
+        };
+
+        login(newProfile);
+        onClose();
+        onSuccess?.();
+      } else {
+        const intlPhone = '+62' + cleanContact.replace(/^0/, '');
+        const { data, error: verifyErr } = await supabase.auth.verifyOtp({
+          phone: intlPhone,
+          token: otpCode.trim(),
+          type: 'sms',
+        });
+
+        if (verifyErr || !data.user) {
+          setError(`Kode OTP salah atau kadaluarsa: ${verifyErr?.message || ''}`);
+          return;
+        }
+
+        const newProfile: UserProfile = {
+          id: data.user.id,
+          contact: cleanContact,
+          type: 'phone',
+          name: name.trim() || `Pelanggan WA ${cleanContact.slice(-4)}`,
+          created_at: new Date().toISOString(),
+        };
+
+        login(newProfile);
+        onClose();
+        onSuccess?.();
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Gagal memverifikasi: ${msg}`);
+    }
   };
 
   return (
@@ -338,16 +391,6 @@ export default function AuthModal({
                     </div>
                   )}
 
-                  {googleNotice && (
-                    <div className="bg-honey/15 border border-honey/30 rounded-button p-3 text-xs text-cocoa space-y-1">
-                      <div className="flex items-center gap-1.5 font-semibold text-cocoa">
-                        <span>ℹ️</span>
-                        <span>Mode Simulasi:</span>
-                      </div>
-                      <p className="text-cocoa/80 leading-relaxed text-[11px]">{googleNotice}</p>
-                    </div>
-                  )}
-
                   {step === 'input' ? (
                     <>
                       {/* Google One-Click Login */}
@@ -395,23 +438,6 @@ export default function AuthModal({
                         <button
                           type="button"
                           onClick={() => {
-                            setAuthType('phone');
-                            setError('');
-                          }}
-                          className={`h-9 text-xs font-semibold rounded-button transition-colors flex items-center justify-center gap-1.5 ${
-                            authType === 'phone'
-                              ? 'bg-honey text-cream shadow-sm'
-                              : 'text-cocoa/70 hover:text-cocoa'
-                          }`}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
-                          </svg>
-                          <span>Nomor WhatsApp</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
                             setAuthType('email');
                             setError('');
                           }}
@@ -426,6 +452,23 @@ export default function AuthModal({
                             <polyline points="22,6 12,13 2,6" />
                           </svg>
                           <span>Alamat Email</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthType('phone');
+                            setError('');
+                          }}
+                          className={`h-9 text-xs font-semibold rounded-button transition-colors flex items-center justify-center gap-1.5 ${
+                            authType === 'phone'
+                              ? 'bg-honey text-cream shadow-sm'
+                              : 'text-cocoa/70 hover:text-cocoa'
+                          }`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+                          </svg>
+                          <span>Nomor WhatsApp</span>
                         </button>
                       </div>
 
@@ -455,7 +498,7 @@ export default function AuthModal({
                         />
                       </div>
 
-                      {error && <p className="text-red-600 text-xs">{error}</p>}
+                      {error && <p className="text-red-600 text-xs leading-relaxed">{error}</p>}
 
                       <button
                         type="button"
@@ -472,58 +515,17 @@ export default function AuthModal({
                           <span>Kirim Kode OTP Verifikasi</span>
                         )}
                       </button>
-
-                      {/* Quick 1-Click Preset Logins */}
-                      <div className="pt-2 border-t border-cocoa/10">
-                        <p className="text-[11px] font-semibold text-cocoa/60 mb-2 text-center">
-                          Akses Cepat Uji Coba:
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleQuickTestLogin('081234567890', 'Budi Santoso', 'phone')
-                            }
-                            className="p-2 border border-honey/40 bg-honey/5 hover:bg-honey/15 rounded-button text-left transition-colors"
-                          >
-                            <p className="font-bold text-xs text-cocoa">Budi Santoso</p>
-                            <p className="text-[10px] text-cocoa/70 font-mono">081234567890</p>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleQuickTestLogin('siti.rahmah@gmail.com', 'Siti Rahmah', 'email')
-                            }
-                            className="p-2 border border-honey/40 bg-honey/5 hover:bg-honey/15 rounded-button text-left transition-colors"
-                          >
-                            <p className="font-bold text-xs text-cocoa">Siti Rahmah</p>
-                            <p className="text-[10px] text-cocoa/70 font-mono truncate">siti.rahmah@gmail.com</p>
-                          </button>
-                        </div>
-                      </div>
                     </>
                   ) : (
                     /* Step OTP */
                     <div className="space-y-3.5">
                       <div className="bg-cream/70 p-3 rounded-card border border-cocoa/10 text-xs text-cocoa space-y-1">
                         <p className="text-cocoa/70 text-[11px]">
-                          Kode verifikasi dikirim ke <strong className="text-cocoa">{contact}</strong>
+                          Kode verifikasi 6-digit telah dikirimkan ke <strong className="text-cocoa">{contact}</strong>
                         </p>
-                        <div className="flex items-center justify-between pt-1">
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-honey/15 text-cocoa font-medium text-[11px]">
-                            <span>Kode OTP:</span>
-                            <strong className="tracking-widest font-mono font-bold text-honey">
-                              {generatedOtp || '123456'}
-                            </strong>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setOtpCode(generatedOtp || '123456')}
-                            className="text-[11px] text-honey font-bold hover:underline"
-                          >
-                            Isi Otomatis
-                          </button>
-                        </div>
+                        <p className="text-[10px] text-cocoa/50">
+                          Periksa pesan masuk atau folder spam email Anda.
+                        </p>
                       </div>
 
                       <div>
@@ -535,7 +537,7 @@ export default function AuthModal({
                           maxLength={6}
                           value={otpCode}
                           onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
-                          placeholder="6 digit kode"
+                          placeholder="000000"
                           className="w-full h-11 text-center tracking-[0.4em] text-lg font-mono font-bold bg-cream/40 border border-cocoa/25 rounded-button text-cocoa focus:ring-2 focus:ring-honey focus:border-transparent outline-none"
                         />
                       </div>
@@ -556,7 +558,10 @@ export default function AuthModal({
                         )}
                         <button
                           type="button"
-                          onClick={() => setStep('input')}
+                          onClick={() => {
+                            setStep('input');
+                            setError('');
+                          }}
                           className="text-cocoa/70 hover:underline"
                         >
                           Ganti {authType === 'phone' ? 'Nomor' : 'Email'}

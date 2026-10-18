@@ -6,9 +6,8 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useCartStore } from '@/lib/store';
 import { useAuthStore } from '@/lib/authStore';
 import { useOrderHistoryStore } from '@/lib/orderStore';
-import { formatRupiah, formatWeight, generateOrderNumber } from '@/lib/utils';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { Order, OrderStatus, PaymentStatus } from '@/lib/types';
+import { formatRupiah, formatWeight } from '@/lib/utils';
+import { Order } from '@/lib/types';
 
 const checkoutSchema = z.object({
   customer_name: z.string().min(3, 'Nama lengkap minimal 3 karakter'),
@@ -100,110 +99,47 @@ export default function CheckoutModal({ isOpen, onClose, onOrderSuccess }: Check
     }
 
     setIsSubmitting(true);
-    const orderNumber = generateOrderNumber();
-    const totalPrice = getTotalPrice();
-    const totalWeight = getTotalWeight();
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customer_name: normalizedFormData.customer_name,
+          customer_phone: normalizedFormData.customer_phone,
+          customer_email: user?.type === 'email' ? user.contact : null,
+          delivery_type: normalizedFormData.delivery_type,
+          customer_address:
+            normalizedFormData.delivery_type === 'DELIVERY'
+              ? normalizedFormData.customer_address
+              : 'Ambil di Toko Fisik (Depok: https://maps.app.goo.gl/bh5CTmGDvAKyjH3Y6)',
+          order_note: normalizedFormData.order_note || null,
+          payment_method: normalizedFormData.payment_method,
+          items: items.map((i) => ({
+            variant_id: i.variant.id,
+            quantity: i.quantity,
+          })),
+        }),
+      });
 
-    const orderUuid =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-          });
-
-    const newOrder: Order = {
-      id: orderUuid,
-      order_number: orderNumber,
-      customer_name: normalizedFormData.customer_name,
-      customer_phone: normalizedFormData.customer_phone,
-      customer_email: user?.type === 'email' ? user.contact : null,
-      customer_address:
-        normalizedFormData.delivery_type === 'DELIVERY'
-          ? normalizedFormData.customer_address
-          : 'Ambil di Toko Fisik (Depok: https://maps.app.goo.gl/bh5CTmGDvAKyjH3Y6)',
-      order_note: normalizedFormData.order_note || null,
-      greeting_card_note: normalizedFormData.order_note || null,
-      total_price: totalPrice,
-      total_weight_grams: totalWeight,
-      order_status: 'pending' as OrderStatus,
-      payment_status: 'unpaid' as PaymentStatus,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      items: items.map((i) => ({
-        id: `item-${Date.now()}-${i.variant.id}`,
-        order_id: orderUuid,
-        product_variant_id: i.variant.id,
-        product_name: i.product.name,
-        variant_label: i.variant.label,
-        quantity: i.quantity,
-        unit_price: i.variant.price,
-      })),
-    };
-
-    // Save to local order store for this account
-    addOrderToHistory(newOrder);
-
-    // Save to Supabase if connected
-    if (isSupabaseConfigured) {
-      try {
-        const { error: orderError } = await supabase.from('orders').insert({
-          id: orderUuid,
-          order_number: newOrder.order_number,
-          customer_name: newOrder.customer_name,
-          customer_phone: newOrder.customer_phone,
-          customer_address: newOrder.customer_address,
-          greeting_card_note: newOrder.greeting_card_note,
-          total_price: newOrder.total_price,
-          total_weight_grams: newOrder.total_weight_grams,
-          order_status: newOrder.order_status,
-          payment_status: newOrder.payment_status,
-        });
-
-        if (orderError) {
-          console.error('Supabase order insert notice:', orderError);
-        } else {
-          const isUuid = (id: string) =>
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-          const orderItems = items
-            .filter((item) => isUuid(item.variant.id))
-            .map((item) => ({
-              order_id: orderUuid,
-              product_variant_id: item.variant.id,
-              product_name: item.product.name,
-              variant_label: item.variant.label,
-              quantity: item.quantity,
-              unit_price: item.variant.price,
-            }));
-
-          if (orderItems.length > 0) {
-            const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-            if (itemsError) console.error('Supabase order items notice:', itemsError);
-          }
-
-          // Decrement stock for ordered variants in Supabase
-          for (const item of items) {
-            if (isUuid(item.variant.id)) {
-              const currentStock = item.variant.stock || 0;
-              const nextStock = Math.max(0, currentStock - item.quantity);
-              await supabase
-                .from('product_variants')
-                .update({ stock: nextStock })
-                .eq('id', item.variant.id);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Supabase checkout notice:', err);
+      const resData = await response.json();
+      if (!response.ok || !resData.success) {
+        setErrors({ general: resData.error || 'Gagal memproses pesanan' });
+        setIsSubmitting(false);
+        return;
       }
-    }
 
-    clearCart();
-    setIsSubmitting(false);
-    onClose();
-    onOrderSuccess(newOrder);
+      const createdOrder: Order = resData.data;
+      addOrderToHistory(createdOrder);
+      clearCart();
+      setIsSubmitting(false);
+      onClose();
+      onOrderSuccess(createdOrder);
+    } catch {
+      setErrors({ general: 'Terjadi kendala jaringan saat memproses pesanan.' });
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -264,6 +200,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderSuccess }: Check
                   <span className="text-[10px] uppercase font-semibold tracking-wider text-palm bg-palm/10 px-2 py-0.5 rounded-full">
                     Terverifikasi
                   </span>
+                </div>
+              )}
+
+              {errors.general && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-card text-xs text-red-700 font-medium">
+                  ⚠️ {errors.general}
                 </div>
               )}
 

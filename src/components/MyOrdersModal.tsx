@@ -34,14 +34,18 @@ export default function MyOrdersModal({ isOpen, onClose, onSelectOrder }: MyOrde
     if (isSupabaseConfigured && user) {
       const fetchUserOrders = async () => {
         try {
+          const sanitizedContact = user.contact.replace(/[^a-zA-Z0-9@.+_-]/g, '');
           const { data } = await supabase
             .from('orders')
             .select('*, order_items(*)')
-            .or(`customer_phone.eq.${user.contact},customer_name.eq.${user.name}`)
+            .or(`customer_phone.eq.${sanitizedContact},customer_email.eq.${sanitizedContact}`)
             .order('created_at', { ascending: false });
 
           if (data && data.length > 0) {
-            const mappedSupabaseOrders = (data as any[]).map((o) => ({
+            interface SupabaseOrderRow extends Order {
+              order_items?: Order['items'];
+            }
+            const mappedSupabaseOrders = (data as unknown as SupabaseOrderRow[]).map((o) => ({
               ...o,
               order_note: o.greeting_card_note || o.order_note,
               items: (o.order_items && o.order_items.length > 0) ? o.order_items : [],
@@ -93,7 +97,7 @@ export default function MyOrdersModal({ isOpen, onClose, onSelectOrder }: MyOrde
         supabase.removeChannel(channel);
       };
     }
-  }, [isOpen, user, updateOrderStatus]);
+  }, [isOpen, user, updateOrderStatus, localOrders]);
 
   const getStatusStep = (status: OrderStatus) => {
     switch (status) {

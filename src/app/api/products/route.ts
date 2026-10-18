@@ -9,7 +9,22 @@ interface VariantInput {
   stock?: number;
 }
 
-// GET: Fetch all products with their variants
+function checkAdminAuth(req: NextRequest): boolean {
+  const adminSecret = process.env.ADMIN_API_KEY || process.env.MERCHANT_SECRET_KEY;
+  const key = req.headers.get('x-admin-key') || req.headers.get('authorization')?.replace('Bearer ', '');
+
+  if (adminSecret) {
+    return key === adminSecret;
+  }
+  // In production, require explicit secret key
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  // In development, allow dev secret
+  return key === 'toko-kue-dev-key' || key === 'dev-secret-key';
+}
+
+// GET: Fetch all active products with their variants (public)
 export async function GET() {
   if (!isSupabaseConfigured) {
     return NextResponse.json({ message: 'Mode demo/simulasi aktif' });
@@ -18,6 +33,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('products')
     .select('*, product_variants(*)')
+    .eq('is_active', true)
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -27,8 +43,15 @@ export async function GET() {
   return NextResponse.json({ data });
 }
 
-// POST: Add new cookie product (from Merchant App)
+// POST: Add new cookie product (from Merchant App - requires auth)
 export async function POST(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Akses ditolak. Kunci otentikasi admin diperlukan.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { name, description, image_url, texture_badge, variants } = body;
@@ -108,8 +131,15 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PUT: Update an existing product
+// PUT: Update an existing product (requires auth)
 export async function PUT(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Akses ditolak. Kunci otentikasi admin diperlukan.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { id, name, description, image_url, texture_badge, is_active } = body;
@@ -153,8 +183,15 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-// DELETE: Delete a product
+// DELETE: Delete a product (requires auth)
 export async function DELETE(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Akses ditolak. Kunci otentikasi admin diperlukan.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
