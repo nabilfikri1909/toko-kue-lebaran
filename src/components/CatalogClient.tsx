@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
-import { ProductWithVariants, Order, ProductVariant } from '@/lib/types';
+import { ProductWithVariants, Order, ProductVariant, Product } from '@/lib/types';
 import Header from '@/components/Header';
 import StoreInfo from '@/components/StoreInfo';
 import CategoryFilter from '@/components/CategoryFilter';
@@ -72,15 +72,15 @@ export default function CatalogClient({ products: initialProducts, isLiveDb = fa
         { event: '*', schema: 'public', table: 'products' },
         async (payload) => {
           if (payload.eventType === 'DELETE') {
-            const oldId = (payload.old as any)?.id;
-            if (oldId) {
-              setProducts((prev) => prev.filter((p) => p.id !== oldId));
+            const oldRow = payload.old as Partial<Product> | null;
+            if (oldRow?.id) {
+              setProducts((prev) => prev.filter((p) => p.id !== oldRow.id));
             }
           } else if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as any;
-            if (updated.is_active === false) {
+            const updated = payload.new as Product | null;
+            if (updated && updated.is_active === false) {
               setProducts((prev) => prev.filter((p) => p.id !== updated.id));
-            } else {
+            } else if (updated) {
               setProducts((prev) =>
                 prev.map((p) =>
                   p.id === updated.id ? { ...p, ...updated } : p
@@ -88,8 +88,8 @@ export default function CatalogClient({ products: initialProducts, isLiveDb = fa
               );
             }
           } else if (payload.eventType === 'INSERT') {
-            const newProd = payload.new as any;
-            if (newProd.is_active !== false) {
+            const newProd = payload.new as Product | null;
+            if (newProd && newProd.is_active !== false) {
               const { data: variants } = await supabase
                 .from('product_variants')
                 .select('*')
@@ -97,7 +97,7 @@ export default function CatalogClient({ products: initialProducts, isLiveDb = fa
                 .order('weight_grams');
               const fullProduct: ProductWithVariants = {
                 ...newProd,
-                product_variants: variants || [],
+                product_variants: (variants as ProductVariant[]) || [],
               };
               setProducts((prev) => [fullProduct, ...prev.filter((p) => p.id !== newProd.id)]);
             }
