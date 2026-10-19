@@ -9,7 +9,7 @@ import { UserProfile } from '@/lib/types';
 export default function AuthCallbackPage() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const [statusMessage, setStatusMessage] = useState('Memproses autentikasi Google...');
+  const [statusMessage, setStatusMessage] = useState('Memproses verifikasi akun...');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,10 +54,11 @@ export default function AuthCallbackPage() {
 
         if (activeSession && activeSession.user) {
           const user = activeSession.user;
+          const isEmail = user.app_metadata?.provider === 'email' || (!user.app_metadata?.provider && !!user.email);
           const userProfile: UserProfile = {
             id: user.id,
-            contact: user.email || user.phone || 'google-user',
-            type: 'google',
+            contact: user.email || user.phone || 'Pelanggan Kue',
+            type: isEmail ? 'email' : 'google',
             name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan Kue',
             avatar_url: user.user_metadata?.avatar_url,
             created_at: new Date().toISOString(),
@@ -72,10 +73,11 @@ export default function AuthCallbackPage() {
           const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (session && session.user && isMounted) {
               const user = session.user;
+              const isEmail = user.app_metadata?.provider === 'email' || (!user.app_metadata?.provider && !!user.email);
               const userProfile: UserProfile = {
                 id: user.id,
-                contact: user.email || 'google-user',
-                type: 'google',
+                contact: user.email || 'Pelanggan Kue',
+                type: isEmail ? 'email' : 'google',
                 name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan Kue',
                 avatar_url: user.user_metadata?.avatar_url,
                 created_at: new Date().toISOString(),

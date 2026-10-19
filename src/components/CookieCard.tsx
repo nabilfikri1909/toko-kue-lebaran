@@ -121,14 +121,23 @@ export default function CookieCard({ product }: CookieCardProps) {
     >
       <div>
         <div className="relative aspect-square overflow-hidden bg-cream/40">
-          <Image
-            src={resolveCookieImage(product)}
-            alt={product.name}
-            fill
-            unoptimized
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
-          />
+          {resolveCookieImage(product).startsWith('data:image') ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={resolveCookieImage(product)}
+              alt={product.name}
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          ) : (
+            <Image
+              src={resolveCookieImage(product)}
+              alt={product.name}
+              fill
+              unoptimized
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          )}
 
           {product.texture_badge && (
             <span className="absolute bottom-3 left-3 z-10 px-2.5 py-1 rounded-full bg-cocoa/80 text-cream backdrop-blur-sm text-[11px] font-medium shadow-sm">
