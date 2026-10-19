@@ -428,7 +428,7 @@ export default function LoginPage() {
               <div className="space-y-4">
                 <div className="bg-cream/80 p-4 rounded-card border border-cocoa/10 text-xs text-cocoa space-y-1.5">
                   <p className="text-cocoa/70">
-                    Kode verifikasi 6-digit telah dikirimkan ke:{' '}
+                    Kode verifikasi OTP telah dikirimkan ke:{' '}
                     <strong className="text-cocoa">{contact}</strong>
                   </p>
                   <p className="text-[11px] text-cocoa/60">
@@ -438,15 +438,15 @@ export default function LoginPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-cocoa mb-1.5">
-                    Masukkan 6 Digit Kode OTP
+                    Masukkan Kode OTP (6 - 8 Digit)
                   </label>
                   <input
                     type="text"
-                    maxLength={6}
+                    maxLength={8}
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="000000"
-                    className="w-full h-12 text-center tracking-[0.4em] text-lg font-mono font-bold bg-cream/30 border border-cocoa/25 rounded-button text-cocoa focus:ring-2 focus:ring-honey focus:border-transparent outline-none"
+                    placeholder="••••••••"
+                    className="w-full h-12 text-center tracking-[0.25em] text-lg font-mono font-bold bg-cream/30 border border-cocoa/25 rounded-button text-cocoa focus:ring-2 focus:ring-honey focus:border-transparent outline-none"
                   />
                 </div>
 
